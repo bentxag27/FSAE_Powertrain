@@ -130,6 +130,9 @@ def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
             I_de += (1/(6*rpm))*(1/TDI)
 
             #penis 
+             
+
+            #FUCK THIS SOFTWARE
 
             
 
