@@ -129,6 +129,67 @@ def wiebe(CAD, Spark, combustion_duration, m):
 
     return xb
 
+def nasa_polynomial(Tcad, element, Combustion_Elements = Combustion_Elements):
+
+    '''
+    Inputs:
+    - Tcad: Temperature at current crank angle degree
+    - Combustion_Elements: dictionary of combustion elements
+    - desired element: string of desired element to calculate Cp for (N2, O2, CO2, H2O, )
+
+    Outputs:
+    - Cp: specific heat capacity (J/(mol*K))
+    '''
+
+    #constants
+    R = 8.314462618 #J/(mol*K)
+
+    if Tcad < 1000:
+        #Calculate Cp for each element
+        Cp = R * (Combustion_Elements[element]['nasa_1']['a1'] + Combustion_Elements[element]['nasa_1']['a2']*Tcad + Combustion_Elements[element]['nasa_1']['a3']*Tcad**2 + Combustion_Elements[element]['nasa_1']['a4']*Tcad**3 + Combustion_Elements[element]['nasa_1']['a5']*Tcad**4)
+    else:
+        #Calculate Cp for each element
+        Cp = R * (Combustion_Elements[element]['nasa_2']['a1'] + Combustion_Elements[element]['nasa_2']['a2']*Tcad + Combustion_Elements[element]['nasa_2']['a3']*Tcad**2 + Combustion_Elements[element]['nasa_2']['a4']*Tcad**3 + Combustion_Elements[element]['nasa_2']['a5']*Tcad**4)
+
+    return Cp
+  
+def shr_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters):
+
+    '''
+    Inputs:
+    - Tcad: Temperature at current crank angle degree
+    - Combustion_Elements: dictionary of combustion elements
+    - engine_parameters: dictionary of engine parameters
+    - lmnbda: A measure of the air fuel ratio of the current mixture
+
+    Outputs:
+    - SHR: specific heat ratio (unitless)
+    '''
+
+    #constants
+    R = 8.314462618 #J/(mol*K)
+
+    #Atmospheric Air Composition
+    V_air = engine_parameters['geometry']['displacement'] * engine_parameters['combustion_charicteristics']['volumetric_efficiency'] #cc
+    V_fuel = V_air / (lmnbda*fuel_properties['stoich_afr']) #cc
+    V_C2H5OH = V_fuel * 0.85 #cc
+    V_C8H18 = V_fuel * 0.15 #cc
+    m_air = V_air * .001225 #g
+    m_C2H5OH = V_C2H5OH * Combustion_Elements['C2H5OH']['density'] #g
+    m_C8H18 = V_C8H18 * Combustion_Elements['C8H18']['density'] #g
+
+
+    #elemental composition of air
+    N2_mol = V_air * .7808 * Combustion_Elements['N2']['density'] #g
+    O2_mol = V_air * .2095 * Combustion_Elements['O2']['density'] #g
+    Ar_mol = V_air * .0093 * Combustion_Elements['Ar']['density'] #g
+    CO2_mol = V_air * .0004 * Combustion_Elements['CO2']['density'] #g
+
+    print(f'm_air: {m_air}, N2_mol: {N2_mol}, O2_mol: {O2_mol}, Ar_mol: {Ar_mol}, CO2_mol: {CO2_mol}')
+    
+
+
+
 def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
 
    '''
@@ -145,7 +206,7 @@ def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
    return 0 #Comeback to this function later, need to figure out how to implement it properly
 
 Combustion_Elements = {
-    ethanol: { 
+    C2H5OH: { 
         density: 0.78945, #g/cm^3
         molar_mass: 46.0684400, #g/mol
         nasa_1: {
@@ -159,8 +220,19 @@ Combustion_Elements = {
             a6: -1.857071450E-07,
             a7: -2.037622570E-10,
         },
+                nasa_1: {
+            min_temp: 159.000, #K
+            max_temp: 390.0007, #K
+            a1: 4.501115940E+05,
+            a2: -1.020828990E+04,
+            a3: 1.014266780E+02,
+            a4: -3.874672610E-01,
+            a5: 7.121392610E-04,
+            a6: -1.857071450E-07,
+            a7: -2.037622570E-10,
+        }
     },
-    octane: {
+    C8H18: {
         density: 0.703, #g/cm^3}
         molar_mass: 114.22852, #g/mol
         nasa_1: {
@@ -334,9 +406,19 @@ engine_parameters = {
     combustion_charicteristics: {
         CADivc: 55, #deg ABDC
         redline_rpm: 9000, #rpm
+        volumetric_efficiency: 0.95, #unitless
     }
 }
 
+fuel_properties = {
+    stoich_afr: 9.8, #unitless
+    lhv: 29.2 #MJ/kg
+
+}
+
+
+
+x = shr_unburned(300, 1.0, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters)
 
 
             
