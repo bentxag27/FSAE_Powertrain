@@ -6,6 +6,8 @@ ___________________________________________________________
 
 '''
 
+from xml.parsers.expat import model
+
 import numpy as np
 import matplotlib.pyplt as plt
 import pandas as pd
@@ -316,6 +318,24 @@ Combustion_Elements = {
     }
 }
 
+engine_parameters = {
+    identifiers:{
+        name: "KTM 690",
+        year: "2019"
+    },
+    geometry: {
+        bore: 80, #mm
+        stroke: 105, #mm
+        crank_radius: 40, #mm
+        con_rod: 160, #mm ***subject to change based on actual con rod length***
+        compression_ratio: 12.7, #unitless
+        displacement: 692.7, #cc
+    },
+    combustion_charicteristics: {
+        CADivc: 55, #deg ABDC
+        redline_rpm: 9000, #rpm
+    }
+}
 
 
 
