@@ -146,10 +146,10 @@ def nasa_polynomial(Tcad, element, Combustion_Elements = Combustion_Elements):
 
     if Tcad < 1000:
         #Calculate Cp for each element
-        Cp = R * (Combustion_Elements[element]['nasa_1']['a1'] + Combustion_Elements[element]['nasa_1']['a2']*Tcad + Combustion_Elements[element]['nasa_1']['a3']*Tcad**2 + Combustion_Elements[element]['nasa_1']['a4']*Tcad**3 + Combustion_Elements[element]['nasa_1']['a5']*Tcad**4)
+        Cp = R * (Combustion_Elements[element]['nasa_1']['a1']*Tcad**-2 + Combustion_Elements[element]['nasa_1']['a2']*Tcad**-1 + Combustion_Elements[element]['nasa_1']['a3'] + Combustion_Elements[element]['nasa_1']['a4']*Tcad + Combustion_Elements[element]['nasa_1']['a5']*Tcad**2 + Combustion_Elements[element]['nasa_1']['a6']*Tcad**3 + Combustion_Elements[element]['nasa_1']['a7']*Tcad**4)
     else:
         #Calculate Cp for each element
-        Cp = R * (Combustion_Elements[element]['nasa_2']['a1'] + Combustion_Elements[element]['nasa_2']['a2']*Tcad + Combustion_Elements[element]['nasa_2']['a3']*Tcad**2 + Combustion_Elements[element]['nasa_2']['a4']*Tcad**3 + Combustion_Elements[element]['nasa_2']['a5']*Tcad**4)
+        Cp = R * (Combustion_Elements[element]['nasa_2']['a1'] + Combustion_Elements[element]['nasa_2']['a2']*Tcad**-2 + Combustion_Elements[element]['nasa_2']['a3']*Tcad**-1 + Combustion_Elements[element]['nasa_2']['a4']*Tcad + Combustion_Elements[element]['nasa_2']['a5']*Tcad**2 + Combustion_Elements[element]['nasa_2']['a6']*Tcad**3 + Combustion_Elements[element]['nasa_2']['a7']*Tcad**4)
 
     return Cp
   
@@ -167,7 +167,7 @@ def shr_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine
     '''
 
     #constants
-    R = 8.314462618 #J/(mol*K)
+    R_u = 8.314472 #J/(mol*K)
 
     #Atmospheric Air Composition
     V_air = engine_parameters['geometry']['displacement'] * engine_parameters['combustion_charicteristics']['volumetric_efficiency'] #cc
@@ -175,17 +175,42 @@ def shr_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine
     V_C2H5OH = V_fuel * 0.85 #cc
     V_C8H18 = V_fuel * 0.15 #cc
     m_air = V_air * .001225 #g
-    m_C2H5OH = V_C2H5OH * Combustion_Elements['C2H5OH']['density'] #g
-    m_C8H18 = V_C8H18 * Combustion_Elements['C8H18']['density'] #g
 
+    #elemental composition of fuel
+
+    #ethanol
+    m_C2H5OH = V_C2H5OH * Combustion_Elements['C2H5OH']['density'] #g
+    Cp_C2H5OH = nasa_polynomial(Tcad, 'C2H5OH', Combustion_Elements) #J/(mol*K)
+
+    #Octane
+    m_C8H18 = V_C8H18 * Combustion_Elements['C8H18']['density'] #g
+    Cp_C8H18 = nasa_polynomial(Tcad, 'C8H18', Combustion_Elements) #J/(mol*K)
 
     #elemental composition of air
-    N2_mol = V_air * .7808 * Combustion_Elements['N2']['density'] #g
-    O2_mol = V_air * .2095 * Combustion_Elements['O2']['density'] #g
-    Ar_mol = V_air * .0093 * Combustion_Elements['Ar']['density'] #g
-    CO2_mol = V_air * .0004 * Combustion_Elements['CO2']['density'] #g
 
-    print(f'm_air: {m_air}, N2_mol: {N2_mol}, O2_mol: {O2_mol}, Ar_mol: {Ar_mol}, CO2_mol: {CO2_mol}')
+    #Nitrogen
+    N2_mol = V_air * .7808 * Combustion_Elements['N2']['density'] #g
+    Cp_N2 = nasa_polynomial(Tcad, 'N2', Combustion_Elements) #J/(mol*K)
+
+    #Oxygen
+    O2_mol = V_air * .2095 * Combustion_Elements['O2']['density'] #g
+    Cp_O2 = nasa_polynomial(Tcad, 'O2', Combustion_Elements) #J/(mol*K)
+
+    #Argon
+    Ar_mol = V_air * .0093 * Combustion_Elements['Ar']['density'] #g
+    Cp_Ar = nasa_polynomial(Tcad, 'Ar', Combustion_Elements) #J/(mol*K)
+
+    #Carbon Dioxide
+    CO2_mol = V_air * .0004 * Combustion_Elements['CO2']['density'] #g
+    Cp_CO2 = nasa_polynomial(Tcad, 'CO2', Combustion_Elements) #J/(mol*K)
+
+    #totals across unburnt gas mixture
+    avg_molar_mass = ((Combustion_Elements['C2H5OH']['molar_mass']*m_C2H5OH) + (Combustion_Elements['C8H18']['molar_mass']*m_C8H18) + (Combustion_Elements['N2']['molar_mass']*m_N2) + (Combustion_Elements['O2']['molar_mass']*m_O2) + (Combustion_Elements['Ar']['molar_mass']*m_Ar) + (Combustion_Elements['CO2']['molar_mass']*m_CO2))/ (m_C2H5OH + m_C8H18 + m_N2 + m_O2 + m_Ar + m_CO2)
+    R_mix = R_u/avg_molar_mass
+    Cp_unburned  = ((Cp_C2H5OH*m_C2H5OH) + (Cp_C8H18*m_C8H18) + (Cp_N2*m_N2) + (Cp_O2*m_O2) + (Cp_Ar*m_Ar) + (Cp_CO2*m_CO2))/ (m_C2H5OH + m_C8H18 + m_N2 + m_O2 + m_Ar + m_CO2)
+    SHR = Cp_unburned/(Cp_unburned-R_mix)
+
+    return SHR
     
 
 
@@ -413,7 +438,6 @@ engine_parameters = {
 fuel_properties = {
     stoich_afr: 9.8, #unitless
     lhv: 29.2 #MJ/kg
-
 }
 
 
