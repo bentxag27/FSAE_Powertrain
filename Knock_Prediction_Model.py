@@ -208,9 +208,46 @@ def shr_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine
     avg_molar_mass = ((Combustion_Elements['C2H5OH']['molar_mass']*m_C2H5OH) + (Combustion_Elements['C8H18']['molar_mass']*m_C8H18) + (Combustion_Elements['N2']['molar_mass']*m_N2) + (Combustion_Elements['O2']['molar_mass']*m_O2) + (Combustion_Elements['Ar']['molar_mass']*m_Ar) + (Combustion_Elements['CO2']['molar_mass']*m_CO2))/ (m_C2H5OH + m_C8H18 + m_N2 + m_O2 + m_Ar + m_CO2)
     R_mix = R_u/avg_molar_mass
     Cp_unburned  = ((Cp_C2H5OH*m_C2H5OH) + (Cp_C8H18*m_C8H18) + (Cp_N2*m_N2) + (Cp_O2*m_O2) + (Cp_Ar*m_Ar) + (Cp_CO2*m_CO2))/ (m_C2H5OH + m_C8H18 + m_N2 + m_O2 + m_Ar + m_CO2)
-    SHR = Cp_unburned/(Cp_unburned-R_mix)
+    shr_unburned = Cp_unburned/(Cp_unburned-R_mix)
 
-    return SHR
+    return shr_unburned
+
+def shr_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters):
+
+    V_air = engine_parameters['geometry']['displacement'] * engine_parameters['combustion_charicteristics']['volumetric_efficiency'] #cc
+    V_fuel = V_air / (lmnbda*fuel_properties['stoich_afr']) #cc
+    V_C2H5OH = V_fuel * 0.85 #cc
+    V_C8H18 = V_fuel * 0.15 #cc
+    m_air = V_air * .001225 #g
+
+    #Ethanol
+    m_C2H5OH = V_C2H5OH * Combustion_Elements['C2H5OH']['density'] #g
+    Cp_C2H5OH = nasa_polynomial(Tcad, 'C2H5OH', Combustion_Elements) #J/(mol*K)
+
+    #Octane
+    m_C8H18 = V_C8H18 * Combustion_Elements['C8H18']['density'] #g
+    Cp_C8H18 = nasa_polynomial(Tcad, 'C8H18', Combustion_Elements) #J/(mol*K)
+
+    #Nitrogen
+    N2_mol = V_air * .7808 * Combustion_Elements['N2']['density'] #g
+    Cp_N2 = nasa_polynomial(Tcad, 'N2', Combustion_Elements) #J/(mol*K)
+
+    #Oxygen
+    O2_mol = V_air * .2095 * Combustion_Elements['O2']['density'] #g
+    Cp_O2 = nasa_polynomial(Tcad, 'O2', Combustion_Elements) #J/(mol*K)
+
+    #Argon
+    Ar_mol = V_air * .0093 * Combustion_Elements['Ar']['density'] #g
+    Cp_Ar = nasa_polynomial(Tcad, 'Ar', Combustion_Elements) #J/(mol*K)
+
+    #Carbon Dioxide
+    CO2_mol = V_air * .0004 * Combustion_Elements['CO2']['density'] #g
+    Cp_CO2 = nasa_polynomial(Tcad, 'CO2', Combustion_Elements) #J/(mol*K)
+
+    
+
+
+
     
 
 
