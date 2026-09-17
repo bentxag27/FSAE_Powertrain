@@ -9,7 +9,7 @@ ___________________________________________________________
 from xml.parsers.expat import model
 
 import numpy as np
-import matplotlib as plt
+import matplotlib.pyplot as plt
 import pandas as pd
 
 
@@ -531,6 +531,7 @@ def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
 x = shr_unburned(300, 1.0, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters)
 
 plt.plot([1,2,3],[4,5,6])
+plt.show()
 
             
 
