@@ -352,6 +352,8 @@ def nasa_polynomial(Tcad, element, Combustion_Elements = Combustion_Elements):
     - Cp: specific heat capacity (J/(mol*K))
     '''
 
+    Tcad = float(Tcad)
+
     #constants
     R = 8.314462618 #J/(mol*K)
 
@@ -528,9 +530,12 @@ def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
 
 
 
-x = shr_unburned(300, 1.0, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters)
+T = np.arange(200, 900)
+y = []
+for i in range(len(T)):
+    y.append(shr_unburned(T[i],.95))
 
-plt.plot([1,2,3],[4,5,6])
+plt.plot(T,y)
 plt.show()
 
             
