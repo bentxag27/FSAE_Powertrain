@@ -211,7 +211,8 @@ def shr_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine
     Cp_CO2 = nasa_polynomial(Tcad, 'CO2', Combustion_Elements) #J/(mol*K)
 
     #totals across unburnt gas mixture
-    avg_molar_mass = ((m_C2H5OH/Combustion_Elements['C2H5OH']['molar_mass']) + (m_C8H18/Combustion_Elements['C8H18']['molar_mass']) + (m_N2/Combustion_Elements['N2']['molar_mass']) + (m_O2/Combustion_Elements['O2']['molar_mass']) + (m_Ar/Combustion_Elements['Ar']['molar_mass']) + (m_CO2/Combustion_Elements['CO2']['molar_mass']))/ (m_C2H5OH + m_C8H18 + m_N2 + m_O2 + m_Ar + m_CO2)
+    mol_total = mol_C2H5OH + mol_C8H18 + mol_N2 + mol_O2 + mol_Ar + mol_CO2
+    avg_molar_mass = ((mol_C2H5OH * Combustion_Elements['C2H5OH']['molar_mass']) + (mol_C8H18 * Combustion_Elements['C8H18']['molar_mass']) + (mol_N2 * Combustion_Elements['N2']['molar_mass']) + (mol_O2 * Combustion_Elements['O2']['molar_mass']) + (mol_Ar * Combustion_Elements['Ar']['molar_mass']) + (mol_CO2 * Combustion_Elements['CO2']['molar_mass']))/ (mol_total)
     R_mix = R_u/avg_molar_mass
     Cp_unburned  = ((Cp_C2H5OH*m_C2H5OH) + (Cp_C8H18*m_C8H18) + (Cp_N2*m_N2) + (Cp_O2*m_O2) + (Cp_Ar*m_Ar) + (Cp_CO2*m_CO2))/ (m_C2H5OH + m_C8H18 + m_N2 + m_O2 + m_Ar + m_CO2)
     shr_unburned = Cp_unburned/(Cp_unburned-R_mix)
