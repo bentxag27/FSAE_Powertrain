@@ -243,10 +243,11 @@ def crank_slider(crank_radius, con_rod, CAD, SHR, Tatm, Patm, CADivc, Disp, CR, 
      - Pcad: pressure at current crank angle degree
      - Tcad: temperatire at current crank angle degree
     '''
-
-    piston_position = crank_radius + con_rod - (((con_rod**2)-((crank_radius**2)*(np.sin(np.pi()/180))**2))**(1/2) + crank_radius*np.cos(np.pi()/180)) 
-    vol = (Disp/CR) + ((np.pi()/4) * (Bore**2) * piston_position)/1000
+    theta = np.deg2rad(CAD)
+    piston_position = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2)*(np.sin(theta))**2)) + crank_radius*np.cos(theta)) 
+    vol = (Disp/CR-1) + ((np.pi/4) * (Bore**2) * piston_position)/1000
     Tivc = Tatm + 15
+    Pivc = 
     Pcad = Patm*(vol/(Disp/CR))
     Tcad = Tivc*(Pcad/Patm)**((SHR-1)/SHR)
     return Pcad, Tcad
@@ -359,10 +360,26 @@ def nasa_polynomial(Tcad, element, Combustion_Elements = Combustion_Elements):
 
     if Tcad < 1000:
         #Calculate Cp for each element
-        Cp = R * (Combustion_Elements[element]['nasa_1']['a1']*Tcad**-2 + Combustion_Elements[element]['nasa_1']['a2']*Tcad**-1 + Combustion_Elements[element]['nasa_1']['a3'] + Combustion_Elements[element]['nasa_1']['a4']*Tcad + Combustion_Elements[element]['nasa_1']['a5']*Tcad**2 + Combustion_Elements[element]['nasa_1']['a6']*Tcad**3 + Combustion_Elements[element]['nasa_1']['a7']*Tcad**4)
+        Cp = R * (
+            Combustion_Elements[element]['nasa_1']['a1']*Tcad**-2 + 
+            Combustion_Elements[element]['nasa_1']['a2']*Tcad**-1 + 
+            Combustion_Elements[element]['nasa_1']['a3'] + 
+            Combustion_Elements[element]['nasa_1']['a4']*Tcad + 
+            Combustion_Elements[element]['nasa_1']['a5']*Tcad**2 + 
+            Combustion_Elements[element]['nasa_1']['a6']*Tcad**3 + 
+            Combustion_Elements[element]['nasa_1']['a7']*Tcad**4
+            )
     else:
         #Calculate Cp for each element
-        Cp = R * (Combustion_Elements[element]['nasa_2']['a1'] + Combustion_Elements[element]['nasa_2']['a2']*Tcad**-2 + Combustion_Elements[element]['nasa_2']['a3']*Tcad**-1 + Combustion_Elements[element]['nasa_2']['a4']*Tcad + Combustion_Elements[element]['nasa_2']['a5']*Tcad**2 + Combustion_Elements[element]['nasa_2']['a6']*Tcad**3 + Combustion_Elements[element]['nasa_2']['a7']*Tcad**4)
+        Cp = R * (
+            Combustion_Elements[element]['nasa_2']['a1']*Tcad**-2 + 
+            Combustion_Elements[element]['nasa_2']['a2']*Tcad**-1 + 
+            Combustion_Elements[element]['nasa_2']['a3'] + 
+            Combustion_Elements[element]['nasa_2']['a4']*Tcad + 
+            Combustion_Elements[element]['nasa_2']['a5']*Tcad**2 + 
+            Combustion_Elements[element]['nasa_2']['a6']*Tcad**3 + 
+            Combustion_Elements[element]['nasa_2']['a7']*Tcad**4
+            )
 
     return Cp
   
@@ -386,7 +403,7 @@ def shr_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine
     V_air = engine_parameters['geometry']['displacement'] * engine_parameters['combustion_charicteristics']['volumetric_efficiency'] #cc
     m_air = V_air * .001225 #g
     m_fuel = m_air / (lmnbda*fuel_properties['stoich_afr']) #cc
-    V_fuel = m_fuel (0.85*Combustion_Elements['C2H5OH']['density'] + 0.15*Combustion_Elements['C8H18'])
+    V_fuel = m_fuel / (0.85*Combustion_Elements['C2H5OH']['density'] + 0.15*Combustion_Elements['C8H18']['density'])
     V_C2H5OH = V_fuel * 0.85 #cc
     V_C8H18 = V_fuel * 0.15 #cc
     
@@ -427,16 +444,7 @@ def shr_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine
 
     #totals across unburnt gas mixture
     mol_total = mol_C2H5OH + mol_C8H18 + mol_N2 + mol_O2 + mol_Ar + mol_CO2
-    avg_molar_mass = (
-        (mol_C2H5OH * Combustion_Elements['C2H5OH']['molar_mass']) + 
-        (mol_C8H18 * Combustion_Elements['C8H18']['molar_mass']) + 
-        (mol_N2 * Combustion_Elements['N2']['molar_mass']) + 
-        (mol_O2 * Combustion_Elements['O2']['molar_mass']) + 
-        (mol_Ar * Combustion_Elements['Ar']['molar_mass']) + 
-        (mol_CO2 * Combustion_Elements['CO2']['molar_mass'])
-        )/ (mol_total)
     
-    R_mix = R_u/avg_molar_mass
     Cp_unburned  = (
         (Cp_C2H5OH*mol_C2H5OH) + 
         (Cp_C8H18*mol_C8H18) + 
@@ -446,7 +454,7 @@ def shr_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine
         (Cp_CO2*mol_CO2)
         )/ (mol_total)
     
-    shr_unburned = Cp_unburned/(Cp_unburned-R_mix)
+    shr_unburned = Cp_unburned/(Cp_unburned-R_u)
 
     return shr_unburned
 
@@ -493,7 +501,7 @@ def shr_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_p
     Cp_CO2 = nasa_polynomial(Tcad, 'CO2', Combustion_Elements) #J/(mol*K)
 
     #Reaction Amounts
-    num_rxn = mol_O2//28
+    num_rxn = mol_O2/28
     mol_C2H5OH = mol_C2H5OH - num_rxn * 1 
     mol_C8H18 = mol_C8H18 - num_rxn * 2
     mol_H2O = num_rxn * 21
@@ -504,15 +512,6 @@ def shr_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_p
     Cp_H2O = nasa_polynomial(Tcad, 'H2O', Combustion_Elements)
 
     mol_total = mol_C2H5OH + mol_C8H18 + mol_H2O + mol_CO2 + mol_N2 + mol_Ar + mol_O2
-    avg_molar_mass = (
-        (Combustion_Elements['C2H5OH']['molar_mass'] * mol_C2H5OH) + 
-        (Combustion_Elements['C8H18']['molar_mass'] * mol_C8H18) + 
-        (Combustion_Elements['N2']['molar_mass'] * mol_N2) + 
-        (Combustion_Elements['O2']['molar_mass'] * mol_O2) + 
-        (Combustion_Elements['Ar']['molar_mass'] * mol_Ar) + 
-        (Combustion_Elements['CO2']['molar_mass'] * mol_CO2) + 
-        (Combustion_Elements['H2O']['molar_mass'])
-        )/mol_total
 
     #Post Combustion
     m_C2H5OH = mol_C2H5OH * Combustion_Elements['C2H5OH']['molar_mass']
@@ -522,18 +521,15 @@ def shr_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_p
     m_O2 = mol_O2 * Combustion_Elements['O2']['molar_mass']
 
     #totals across unburnt gas mixture
-    R_mix = R_u/avg_molar_mass
+
     Cp_burned  = (
-        (Cp_C2H5OH*mol_C2H5OH) + 
-        (Cp_C8H18*mol_C8H18) + 
-        (Cp_N2*mol_N2) + 
-        (Cp_O2*mol_O2) + 
+        (Cp_N2*mol_N2) +  
         (Cp_Ar*mol_Ar) + 
         (Cp_CO2*mol_CO2) + 
         (Cp_H2O*mol_H2O)
         )/ mol_total
     
-    shr_burned = Cp_burned/(Cp_burned-R_mix)
+    shr_burned = Cp_burned/(Cp_burned-R_u)
 
 
     return shr_burned
