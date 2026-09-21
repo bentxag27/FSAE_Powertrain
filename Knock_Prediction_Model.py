@@ -290,7 +290,10 @@ def volume(CAD, CAD_step, engine_parameters = engine_parameters):
     v_i = clearance_volume + ((np.pi * Bore**2)/4)*x_i
     v_i_1 = clearance_volume + ((np.pi * Bore**2)/4)*x_i_1
 
-    return v_i, v_i_1
+    #Heat transfer area
+    Ah = (np.pi*Bore**2)/2 + np.pi*Bore*x_i
+
+    return v_i, v_i_1, Ah
 
 
 def douaund_eyzat(ON, Pcad, Tcad):
@@ -383,7 +386,8 @@ def wiebe(CAD, CAD_step, Spark, combustion_duration):
 
     return xb_i, xb_i_1
 
-def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbda):
+def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbda, rpm, Tatm, T_wall engine_parameters = engine_parameters, fuel_properties = fuel_properties):
+
     '''
     Inputs:
     - CAD: current crank angle degree (deg)
@@ -395,18 +399,56 @@ def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbd
     - P_i_1: pressure increase over CAD_step (Pa)
     '''
 
+    #Important Engine Metrics
+    crank_radius = engine_parameters['geometry']['crank_radius'] #mm
+    con_rod = engine_parameters['geometry']['con_rod'] #mm
+    CAD_ivc = engine_parameters['combustion_characteristics']['CADivc'] #deg
+    Disp = engine_parameters['geometry']['displacement'] #cc
+    CR = engine_parameters['geometry']['compression_ratio'] #unitless
+    Bore = engine_parameters['geometry']['bore'] #mm
+    stroke = engine_parameters['geometry']['stroke'] #mm
+    MAP = engine_parameters['combustion_characteristics']['MAP'] #kPa
+
     #Universal Gas Constant
     R_u = 8.314462618 #J/(mol*K)
+
+    #Baseline Metrics at Intake Valve Closing
+    piston_position_ivc = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2) * (np.sin(np.deg2rad(CAD_ivc)))**2)) + crank_radius*np.cos(np.deg2rad(CAD_ivc)))
+    clearance_volume = Disp / CR
+    vol_ivc = clearance_volume + ((np.pi/4) * (Bore**2) * piston_position_ivc)/1000
+    Tivc = Tatm + 15
+    Pivc = MAP*1000 #Pa
+
 
     #Wiebe Function Components 
     xb_i, xb_i_1 = wiebe(CAD, CAD_step, Spark, combustion_duration)
 
     #Specific Heat Ratio
-    Cp = Cp_burned(T_i, lmnbda)*xb_i + Cp_unburned(T_i, lmnbda)*(1-xb_i)
+    Cp_u, mol_total, m_fuel = Cp_unburned(T_i, lmnbda)
+    Cp = Cp_burned(T_i, lmnbda)*xb_i + Cp_u*(1-xb_i)
     k = Cp/(Cp - R_u)
 
     #Volume
-    v_i, v_i_1 = volume(CAD, CAD_step)
+    v_i, v_i_1, Ah = volume(CAD, CAD_step)
+
+    #Heat Gained from combustion
+    V_air = Disp * engine_parameters['combustion_charicteristics']['volumetric_efficiency'] #cc
+    m_air = V_air * .001225 #g
+    m_fuel = (m_air / (lmnbda*fuel_properties['stoich_afr']))/1000 #kg
+    Qin = m_fuel*fuel_properties['lhv']*1000000 #J
+
+    #Heat Transfer to the walls
+    mean_piston_speed = 2*(stroke/1000)*rpm / 60
+    pressure_motored = Pivc * (vol_ivc/v_i)**k
+    w = 2.28*mean_piston_speed + 0.00324*((v_i * Tivc)/(vol_ivc * Pivc))*(P_i - pressure_motored)
+    hcg = 3.26*(engine_parameters['geometry']['bore']/1000)**-0.2 * P_i**0.8 * T_i**-0.55 * w**0.8
+    Qloss = (hcg * Ah / (2*np.pi*rpm/60))*(T_i - T_wall)
+
+    P_i_1 = P_i + ((k-1)/v_i)*(Qin*(xb_i_1 - xb_i) - Qloss*CAD_step) - (k*P_i/v_i)*(v_i_1-v_i)
+
+    T_i_1 = (P_i_1 * v_i_1)/(n_total * R_u)
+
+
 
     
 
@@ -469,7 +511,7 @@ def Cp_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_
     #Atmospheric Air Composition
     V_air = engine_parameters['geometry']['displacement'] * engine_parameters['combustion_charicteristics']['volumetric_efficiency'] #cc
     m_air = V_air * .001225 #g
-    m_fuel = m_air / (lmnbda*fuel_properties['stoich_afr']) #cc
+    m_fuel = m_air / (lmnbda*fuel_properties['stoich_afr']) #g
     V_fuel = m_fuel / (0.85*Combustion_Elements['C2H5OH']['density'] + 0.15*Combustion_Elements['C8H18']['density'])
     V_C2H5OH = V_fuel * 0.85 #cc
     V_C8H18 = V_fuel * 0.15 #cc
@@ -521,7 +563,7 @@ def Cp_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_
         (Cp_CO2*mol_CO2)
         )/ (mol_total)
 
-    return Cp_unburned 
+    return Cp_unburned, mol_total, m_fuel 
 
 def Cp_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters):
 
