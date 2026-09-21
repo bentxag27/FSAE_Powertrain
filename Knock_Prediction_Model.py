@@ -6,8 +6,6 @@ ___________________________________________________________
 
 '''
 
-from xml.parsers.expat import model
-
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -215,6 +213,7 @@ engine_parameters = {
         'CADivc': 55, #deg ABDC
         'redline_rpm': 9000, #rpm
         'volumetric_efficiency': 0.95, #unitless
+        'MAP' : 86.3 #kPa
     }
 }
 
@@ -225,7 +224,7 @@ fuel_properties = {
 
 #Preliminary Functions 
 
-def crank_slider(crank_radius, con_rod, CAD, SHR, Tatm, Patm, CADivc, Disp, CR, Bore):
+def crank_slider(CAD, SHR, Tatm, Patm, engine_parameters = engine_parameters):
 
     '''
     Inputs:
@@ -243,14 +242,56 @@ def crank_slider(crank_radius, con_rod, CAD, SHR, Tatm, Patm, CADivc, Disp, CR, 
      - Pcad: pressure at current crank angle degree
      - Tcad: temperatire at current crank angle degree
     '''
-    theta = np.deg2rad(CAD)
-    piston_position = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2)*(np.sin(theta))**2)) + crank_radius*np.cos(theta)) 
-    vol = (Disp/CR-1) + ((np.pi/4) * (Bore**2) * piston_position)/1000
+
+    #Important Engine Metrics
+    crank_radius = engine_parameters['geometry']['crank_radius']
+    con_rod = engine_parameters['geometry']['con_rod']
+    CAD_ivc = engine_parameters['combustion_characteristics']['CADivc']
+    Disp = engine_parameters['geometry']['displacement']
+    CR = engine_parameters['geometry']['compression_ratio']
+    Bore = engine_parameters['geometry']['bore']
+    MAP = engine_parameters['combustion_characteristics']['MAP']
+
+
+
+    #Baseline Metrics at Intake Valve Closing
+    piston_position_ivc = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2) * (np.sin(np.deg2rad(CAD_ivc)))**2)) + crank_radius*np.cos(np.deg2rad(CAD_ivc)))
+    clearance_volume = Disp / CR
+    vol_ivc = clearance_volume + ((np.pi/4) * (Bore**2) * piston_position_ivc)/1000
     Tivc = Tatm + 15
-    Pivc = 
-    Pcad = Patm*(vol/(Disp/CR))
-    Tcad = Tivc*(Pcad/Patm)**((SHR-1)/SHR)
+    Pivc = MAP
+    
+
+    #Metrics throughout adiabatic compression
+    theta = np.deg2rad(CAD)
+    piston_position = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2)*(np.sin(theta))**2)) + crank_radius*np.cos(theta))
+    vol = clearance_volume + ((np.pi/4) * (Bore**2) * piston_position)/1000
+    Pcad = Pivc*(vol_ivc/vol)**SHR
+    Tcad = Tivc*(vol_ivc/vol)**(SHR-1)
+
+
     return Pcad, Tcad
+
+def volume(CAD, CAD_step, engine_parameters = engine_parameters):
+
+    #Important Engine Metrics
+    crank_radius = engine_parameters['geometry']['crank_radius']
+    con_rod = engine_parameters['geometry']['con_rod']
+    Disp = engine_parameters['geometry']['displacement']
+    CR = engine_parameters['geometry']['compression_ratio']
+    Bore = engine_parameters['geometry']['bore']
+    clearance_volume = Disp/CR
+
+    #Volume Model
+    theta = np.deg2rad(CAD)
+    theta_step = np.deg2rad(CAD_step)
+    x_i = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2)*(np.sin(theta))**2)) + crank_radius*np.cos(theta))
+    x_i_1 = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2)*(np.sin(theta+theta_step))**2)) + crank_radius*np.cos(theta+theta_step))
+    v_i = clearance_volume + ((np.pi * Bore**2)/4)*x_i
+    v_i_1 = clearance_volume + ((np.pi * Bore**2)/4)*x_i_1
+
+    return v_i, v_i_1
+
 
 def douaund_eyzat(ON, Pcad, Tcad):
 
@@ -383,7 +424,7 @@ def nasa_polynomial(Tcad, element, Combustion_Elements = Combustion_Elements):
 
     return Cp
   
-def shr_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters):
+def Cp_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters):
 
     '''
     Inputs:
@@ -396,8 +437,6 @@ def shr_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine
     - SHR: specific heat ratio (unitless)
     '''
 
-    #constants
-    R_u = 8.314472 #J/(mol*K)
 
     #Atmospheric Air Composition
     V_air = engine_parameters['geometry']['displacement'] * engine_parameters['combustion_charicteristics']['volumetric_efficiency'] #cc
@@ -453,32 +492,25 @@ def shr_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine
         (Cp_Ar*mol_Ar) + 
         (Cp_CO2*mol_CO2)
         )/ (mol_total)
-    
-    shr_unburned = Cp_unburned/(Cp_unburned-R_u)
 
-    return shr_unburned
+    return Cp_unburned 
 
-def shr_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters):
+def Cp_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters):
 
     V_air = engine_parameters['geometry']['displacement'] * engine_parameters['combustion_charicteristics']['volumetric_efficiency'] #cc
     V_fuel = V_air / (lmnbda*fuel_properties['stoich_afr']) #cc
     V_C2H5OH = V_fuel * 0.85 #cc
     V_C8H18 = V_fuel * 0.15 #cc
-    m_air = V_air * .001225 #g
-
-    R_u = 8.314472 #J/(mol*K)
 
     #Precombustion mols
 
     #Ethanol
     m_C2H5OH = V_C2H5OH * Combustion_Elements['C2H5OH']['density'] #g
     mol_C2H5OH = m_C2H5OH / Combustion_Elements['C2H5OH']['molar_mass'] #mol
-    Cp_C2H5OH = nasa_polynomial(Tcad, 'C2H5OH', Combustion_Elements) #J/(mol*K)
 
     #Octane
     m_C8H18 = V_C8H18 * Combustion_Elements['C8H18']['density'] #g
     mol_C8H18 = m_C8H18 / Combustion_Elements['C8H18']['molar_mass'] #mol
-    Cp_C8H18 = nasa_polynomial(Tcad, 'C8H18', Combustion_Elements) #J/(mol*K)
 
     #Nitrogen
     m_N2 = V_air * .7808 * Combustion_Elements['N2']['density'] #g
@@ -488,7 +520,6 @@ def shr_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_p
     #Oxygen
     m_O2 = V_air * .2095 * Combustion_Elements['O2']['density'] #g
     mol_O2 = m_O2 / Combustion_Elements['O2']['molar_mass'] #mol
-    Cp_O2 = nasa_polynomial(Tcad, 'O2', Combustion_Elements) #J/(mol*K)
 
     #Argon
     m_Ar = V_air * .0093 * Combustion_Elements['Ar']['density'] #g
@@ -506,12 +537,11 @@ def shr_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_p
     mol_C8H18 = mol_C8H18 - num_rxn * 2
     mol_H2O = num_rxn * 21
     mol_CO2 = mol_CO2 + num_rxn * 18
-    mol_O2 = mol_O2 - num_rxn * 28
 
     #Water
     Cp_H2O = nasa_polynomial(Tcad, 'H2O', Combustion_Elements)
 
-    mol_total = mol_C2H5OH + mol_C8H18 + mol_H2O + mol_CO2 + mol_N2 + mol_Ar + mol_O2
+    mol_total = mol_H2O + mol_CO2 + mol_N2 + mol_Ar 
 
     #Post Combustion
     m_C2H5OH = mol_C2H5OH * Combustion_Elements['C2H5OH']['molar_mass']
@@ -528,19 +558,8 @@ def shr_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_p
         (Cp_CO2*mol_CO2) + 
         (Cp_H2O*mol_H2O)
         )/ mol_total
-    
-    shr_burned = Cp_burned/(Cp_burned-R_u)
 
-
-    return shr_burned
-
-    
-
-
-
-    
-
-
+    return Cp_burned
 
 def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
 
@@ -564,7 +583,9 @@ def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
 T = np.arange(200, 900)
 y = []
 for i in range(len(T)):
-    y.append(shr_unburned(T[i],.95))
+    y.append(Cp_unburned(T[i],.95))
+
+print(f' Specific Heat Ratio at Intake Valve Closing is {Cp_unburned(294.2,.95)}')
 
 plt.plot(T,y)
 plt.show()
