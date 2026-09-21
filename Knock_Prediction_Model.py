@@ -361,7 +361,7 @@ def chen_zheng(lmnbda, Xegr, Pcad, Tcad):
 
     return IDT
 
-def wiebe(CAD, Spark, combustion_duration, m):
+def wiebe(CAD, CAD_step, Spark, combustion_duration):
 
     '''
     Inputs:
@@ -376,11 +376,39 @@ def wiebe(CAD, Spark, combustion_duration, m):
     '''
     #constants
     a = 6.9078 #0-99.9% burned
+    m = 2 #based on general assumption ***needs to be updated***
+
+    xb_i = 1 - np.e**(-a*((CAD-Spark)/(combustion_duration))**(m+1))
+    xb_i_1 = 1 - np.e**(-a*((CAD_step-Spark)/(combustion_duration))**(m+1))
+
+    return xb_i, xb_i_1
+
+def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbda):
+    '''
+    Inputs:
+    - CAD: current crank angle degree (deg)
+    - CAD_step: crank angle step size (deg)
+    - P_i: current pressure (Pa)
+    - T_i: current temperature (K)
     
+    Outputs:
+    - P_i_1: pressure increase over CAD_step (Pa)
+    '''
 
-    xb = 1 - np.e**(-a*((CAD-Spark)/(combustion_duration))**(m+1))
+    #Universal Gas Constant
+    R_u = 8.314462618 #J/(mol*K)
 
-    return xb
+    #Wiebe Function Components 
+    xb_i, xb_i_1 = wiebe(CAD, CAD_step, Spark, combustion_duration)
+
+    #Specific Heat Ratio
+    Cp = Cp_burned(T_i, lmnbda)*xb_i + Cp_unburned(T_i, lmnbda)*(1-xb_i)
+    k = Cp/(Cp - R_u)
+
+    #Volume
+    v_i, v_i_1 = volume(CAD, CAD_step)
+
+    
 
 def nasa_polynomial(Tcad, element, Combustion_Elements = Combustion_Elements):
 
@@ -577,18 +605,6 @@ def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
    return 0 #Comeback to this function later, need to figure out how to implement it properly
 
 
-
-
-#unburnt gas test 
-T = np.arange(200, 900)
-y = []
-for i in range(len(T)):
-    y.append(Cp_unburned(T[i],.95))
-
-print(f' Specific Heat Ratio at Intake Valve Closing is {Cp_unburned(294.2,.95)}')
-
-plt.plot(T,y)
-plt.show()
 
             
 
