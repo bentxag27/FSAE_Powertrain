@@ -666,18 +666,18 @@ T_wall = np.random.uniform(453.15,523.15, monte_carlo_sims)
 
 
 #Initialize Pressure and Temperature Data
-Pressure = {}
-Temperature = {}
+pressure = {}
+temperature = {}
 
-for Spark in range(0,20):
+for spark in range(0,20):
 
-    Pressure.update({Spark:[engine_parameters['combustion_charicteristics']['MAP']]})
-    Temperature.update({Spark:[Tatm + 15]})
+    pressure.update({spark:[engine_parameters['combustion_charicteristics']['MAP']]})
+    temperature.update({spark:[weather_data['rellis']['Tatm'] + 15]})
 
-    for CAD in range(engine_parameters['combustion_charicteristics']['CADivc']+ 180, (360 - Spark + combustion_duration),1):
+    for CAD in range(engine_parameters['combustion_charicteristics']['CADivc']+ 180, (360 - spark + combustion_duration),1):
 
-        while CAD < 360-Spark: 
-            Cp_unburned, mol_total, m_fuel = Cp_unburned(T)
+        while CAD < 360-spark: 
+            Cp_unburned, mol_total, m_fuel = Cp_unburned(temperature[spark][-1],.95)
             Pcad, Tcad = crank_slider(CAD, )
 
 
