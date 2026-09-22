@@ -696,7 +696,7 @@ ___________________________________________________________
 #User imports for specific model
 location = input('Testing Location:   ')
 fuel_type = input('Fuel Type:   ')
-lmnbda = input('Lambda')
+lmnbda = input('Lambda:   ')
 
 
 #Important Variables
@@ -738,7 +738,7 @@ for spark in range(0,20):
     CADs.update({spark:[]})
 
      
-    for CAD in range(engine_parameters['combustion_charicteristics']['CADivc']+ 180, (360 - spark + combustion_duration),1):
+    for CAD in np.arange((engine_parameters['combustion_charicteristics']['CADivc']+ 180), (360 - spark + combustion_duration),1):
 
         while CAD < 360-spark: 
             Cp_unburned, mol_total, m_fuel = Cp_unburned(temperature[spark][-1],.95)
