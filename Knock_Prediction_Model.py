@@ -224,7 +224,8 @@ fuel_properties = {
 
 weather_data = {
     'standard_sea_level':{
-        'Patm': 
+        'Patm': 101.325, #kPa
+        'Tatm': 298.15 #K
     }
 }
 #Preliminary Functions 
