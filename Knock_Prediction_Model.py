@@ -226,6 +226,14 @@ weather_data = {
     'standard_sea_level':{
         'Patm': 101.325, #kPa
         'Tatm': 298.15 #K
+    },
+    'michigan_international_speedway':{
+        'Patm': 97.522, #kPa
+        'Tatm': 294.3 #K
+    },
+    'rellis':{
+        'Patm': 100.375, #kPa
+        'Tatm': 305.4 #K
     }
 }
 #Preliminary Functions 
@@ -649,7 +657,15 @@ def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
     '''
    return 0 #Comeback to this function later, need to figure out how to implement it properly
 
+#Monte Carlo Simulations
+monte_carlo_sims = 1000
+combustion_duration = np.random.uniform(35,50, monte_carlo_sims)
+m = np.random.uniform(1.5,2.5, monte_carlo_sims)
+T_wall = np.random.uniform(453.15,523.15, monte_carlo_sims)
 
+
+
+#Initialize Pressure and Temperature Data
 Pressure = {}
 Temperature = {}
 
