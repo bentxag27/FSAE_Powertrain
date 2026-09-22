@@ -233,7 +233,7 @@ fuel_properties = {
         'lhv': 29.2, #MJ/kg
         'ON' : 99 #Octane
     },
-    'Pump_93':{
+    '93':{
         'stoich_afr': 14.08, #unitless
         'lhv': 41.6, #MJ/kg
         'ON': 93 #Octane
@@ -696,12 +696,15 @@ ___________________________________________________________
 #User imports for specific model
 location = input('Testing Location:   ')
 fuel_type = input('Fuel Type:   ')
+lmnbda = input('Lambda')
 
 
 #Important Variables
 pk_T_rpm = engine_parameters['combustion_charicteristics']['peak_torque_rpm'] #rpm
 R = R = 8.314462618 #J/(mol*K)
-
+ON = fuel_properties[fuel_type]['ON']
+Patm = weather_data[location]['Patm']
+Tatm = weather_data[location]['Tatm']
 
 
 #Monte Carlo Simulations
@@ -719,6 +722,7 @@ livengood_wu_integral = {
     'hoepke':{},
     'chen_zheng':{}
 }
+CADs = {}
 
 for spark in range(0,20):
 
@@ -731,7 +735,9 @@ for spark in range(0,20):
     livengood_wu_integral['douaund_eyzat'].update({spark:[0]})
     livengood_wu_integral['hoepke'].update({spark:[0]})
     livengood_wu_integral['chen_zheng'].update({spark:[0]})
-    
+    CADs.update({spark:[]})
+
+     
     for CAD in range(engine_parameters['combustion_charicteristics']['CADivc']+ 180, (360 - spark + combustion_duration),1):
 
         while CAD < 360-spark: 
@@ -739,12 +745,25 @@ for spark in range(0,20):
             shr = Cp_unburned / (Cp_unburned - R)
             Pcad, Tcad = crank_slider(CAD, shr, weather_data['rellis']['Tatm'])
 
+        else:
+            Pcad, Tcad = pressure_increase(CAD, 1, pressure[spark][-1], temperature[spark][-1], spark, combustion_duration, lmnbda, rpm, Tatm, T_wall)
+        
             #Pressure and Temperature
             pressure[spark].append(Pcad)
             temperature[spark].append(Tcad)
 
             #Ignition Delay Timing
             livengood_wu_integral['douaund_eyzat'][spark].append(livengood_wu(rpm, douaund_eyzat(ON, Pcad, Tcad)))
+            livengood_wu_integral['hoepke'][spark].append(livengood_wu(rpm, hoepke(0, Pcad, Tcad)))
+            livengood_wu_integral['chen_zheng'][spark].append(livengood_wu(rpm, chen_zheng(lmnbda,0,Pcad,Tcad)))
+
+
+plt.figure(CADs[12], livengood_wu_integral['chen_zheng'])
+plt.show()
+    
+
+        
+
 
 
 
