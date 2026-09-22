@@ -210,7 +210,7 @@ engine_parameters = {
         'displacement': 692.7, #cc
     },
     'combustion_charicteristics': {
-        'CADivc': 55, #deg ABDC
+        'CADivc': 53, #deg ABDC
         'redline_rpm': 9000, #rpm
         'volumetric_efficiency': 0.95, #unitless
         'MAP' : 86.3 #kPa
@@ -222,6 +222,11 @@ fuel_properties = {
     'lhv': 29.2 #MJ/kg
 }
 
+weather_data = {
+    'standard_sea_level':{
+        'Patm': 
+    }
+}
 #Preliminary Functions 
 
 def crank_slider(CAD, SHR, Tatm, Patm, engine_parameters = engine_parameters):
@@ -386,7 +391,7 @@ def wiebe(CAD, CAD_step, Spark, combustion_duration):
 
     return xb_i, xb_i_1
 
-def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbda, rpm, Tatm, T_wall engine_parameters = engine_parameters, fuel_properties = fuel_properties):
+def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbda, rpm, Tatm, T_wall, engine_parameters = engine_parameters, fuel_properties = fuel_properties):
 
     '''
     Inputs:
@@ -445,12 +450,9 @@ def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbd
     Qloss = (hcg * Ah / (2*np.pi*rpm/60))*(T_i - T_wall)
 
     P_i_1 = P_i + ((k-1)/v_i)*(Qin*(xb_i_1 - xb_i) - Qloss*CAD_step) - (k*P_i/v_i)*(v_i_1-v_i)
+    T_i_1 = (P_i_1 * v_i_1)/(mol_total * R_u)
 
-    T_i_1 = (P_i_1 * v_i_1)/(n_total * R_u)
-
-
-
-    
+    return P_i_1, T_i_1
 
 def nasa_polynomial(Tcad, element, Combustion_Elements = Combustion_Elements):
 
@@ -645,6 +647,24 @@ def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
     - 
     '''
    return 0 #Comeback to this function later, need to figure out how to implement it properly
+
+
+Pressure = {}
+Temperature = {}
+
+for Spark in range(0,20):
+
+    Pressure.update({Spark:[engine_parameters['combustion_charicteristics']['MAP']]})
+    Temperature.update({Spark:[Tatm + 15]})
+
+    for CAD in range(engine_parameters['combustion_charicteristics']['CADivc']+ 180, (360 - Spark + combustion_duration),1):
+
+        while CAD < 360-Spark: 
+            Cp_unburned, mol_total, m_fuel = Cp_unburned(T)
+            Pcad, Tcad = crank_slider(CAD, )
+
+
+
 
 
 
