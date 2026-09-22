@@ -9,7 +9,16 @@ ___________________________________________________________
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import PySide6 as Py
+import tkinter as tk
 
+'''
+___________________________________________________________
+|                                                         |
+|               Information Dictionaries                  |
+|_________________________________________________________|
+
+'''
 
 Combustion_Elements = {
     'C2H5OH': { 
@@ -213,14 +222,24 @@ engine_parameters = {
         'CADivc': 53, #deg ABDC
         'redline_rpm': 9000, #rpm
         'volumetric_efficiency': 0.95, #unitless
-        'MAP' : 86.3 #kPa
+        'MAP' : 86.3, #kPa
+        'peak_torque_rpm': 6500 #rpm
     }
 }
 
 fuel_properties = {
-    'stoich_afr': 9.8, #unitless
-    'lhv': 29.2 #MJ/kg
+    'E85':{
+        'stoich_afr': 9.8, #unitless
+        'lhv': 29.2, #MJ/kg
+        'ON' : 99 #Octane
+    },
+    'Pump_93':{
+        'stoich_afr': 14.08, #unitless
+        'lhv': 41.6, #MJ/kg
+        'ON': 93 #Octane
+    }
 }
+
 
 weather_data = {
     'standard_sea_level':{
@@ -236,9 +255,16 @@ weather_data = {
         'Tatm': 305.4 #K
     }
 }
-#Preliminary Functions 
 
-def crank_slider(CAD, SHR, Tatm, Patm, engine_parameters = engine_parameters):
+'''
+___________________________________________________________
+|                                                         |
+|                        Functions                        |
+|_________________________________________________________|
+
+''' 
+
+def crank_slider(CAD, SHR, Tatm, engine_parameters = engine_parameters):
 
     '''
     Inputs:
@@ -642,7 +668,7 @@ def Cp_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_pa
 
     return Cp_burned
 
-def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
+def livengood_wu(rpm, IDT):
 
    '''
     Inputs:
@@ -655,30 +681,70 @@ def livengood_wu(rpm, Pcad_run, Tcad_run, CADivc, CADeoc):
     Outputs:
     - 
     '''
-   return 0 #Comeback to this function later, need to figure out how to implement it properly
+
+   LWI = (1 / (6 * rpm)) * (1/IDT)
+   
+   return  LWI 
+
+'''
+___________________________________________________________
+|                                                         |
+|                       Main Code                         |
+|_________________________________________________________|
+
+'''
+#User imports for specific model
+location = input('Testing Location:   ')
+fuel_type = input('Fuel Type:   ')
+
+
+#Important Variables
+pk_T_rpm = engine_parameters['combustion_charicteristics']['peak_torque_rpm'] #rpm
+R = R = 8.314462618 #J/(mol*K)
+
+
 
 #Monte Carlo Simulations
 monte_carlo_sims = 1000
 combustion_duration = np.random.uniform(35,50, monte_carlo_sims)
 m = np.random.uniform(1.5,2.5, monte_carlo_sims)
 T_wall = np.random.uniform(453.15,523.15, monte_carlo_sims)
-
-
+rpm = np.random.uniform(pk_T_rpm - 100, pk_T_rpm + 100, monte_carlo_sims)
 
 #Initialize Pressure and Temperature Data
 pressure = {}
 temperature = {}
+livengood_wu_integral = {
+    'douaund_eyzat':{},
+    'hoepke':{},
+    'chen_zheng':{}
+}
 
 for spark in range(0,20):
 
+    #Add a dictionary for each tested spark timing
+    #pressure and temperature
     pressure.update({spark:[engine_parameters['combustion_charicteristics']['MAP']]})
     temperature.update({spark:[weather_data['rellis']['Tatm'] + 15]})
 
+    #ignition delay timing
+    livengood_wu_integral['douaund_eyzat'].update({spark:[0]})
+    livengood_wu_integral['hoepke'].update({spark:[0]})
+    livengood_wu_integral['chen_zheng'].update({spark:[0]})
+    
     for CAD in range(engine_parameters['combustion_charicteristics']['CADivc']+ 180, (360 - spark + combustion_duration),1):
 
         while CAD < 360-spark: 
             Cp_unburned, mol_total, m_fuel = Cp_unburned(temperature[spark][-1],.95)
-            Pcad, Tcad = crank_slider(CAD, )
+            shr = Cp_unburned / (Cp_unburned - R)
+            Pcad, Tcad = crank_slider(CAD, shr, weather_data['rellis']['Tatm'])
+
+            #Pressure and Temperature
+            pressure[spark].append(Pcad)
+            temperature[spark].append(Tcad)
+
+            #Ignition Delay Timing
+            livengood_wu_integral['douaund_eyzat'][spark].append(livengood_wu(rpm, douaund_eyzat(ON, Pcad, Tcad)))
 
 
 
