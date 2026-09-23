@@ -8,6 +8,15 @@
 ============================================================
 
 '''
+'''
+Model Notes:
+ - All timing angles are from 0 deg bieng the piston at top
+ dead center before the start of the intake stroke.
+ - 
+
+
+'''
+
 
 '''
 ___________________________________________________________
@@ -285,27 +294,32 @@ def crank_slider(CAD, SHR, Tatm, engine_parameters = engine_parameters):
     temperature and pressure from engine geometry and the temperature and 
     pressure at intake valve closing. Solves for the adiabatic portion of 
     the compression stroke is used for the motored pressure necessary for 
-    the Woschni heat transfer model
+    the Woschni heat transfer model. Additionally it provides the current 
+    volume and heat transfer area to the walls.
 
-    Inputs:
-     - Engine Geometries
-         - crank_radius (mm)
-         - connecting_rod (mm)
-         - bore (mm)
-         - displacement (cc)
-         - compression_ratio (unitless)
-         - CAD_ivc (deg)
-         - MAP (Pa)
-     - CAD (deg)
-     - SHR (unitless)
-     - t_atm (K)
+    Inputs:                   (unit)      [description]
+     - Engine Geometries     
+         - crank_radius       (mm)
+         - connecting_rod     (mm)
+         - bore               (mm)
+         - displacement       (cc)
+         - compression_ratio  (unitless)
+         - CAD_ivc            (deg)       [crank angle degree at intake valve closing]
+         - MAP                (Pa)        [manifold air pressure]
+     - CAD                    (deg)       [current crank angle degree]
+     - CAD_step               (deg)       [current crank angle degree step size]
+     - SHR                    (unitless)  [the specific heat ratio of the gas mixture in the cylinder]
+     - t_atm                  (K)         [atmospheric tremperature]
 
      Outputs:
-     - p_cad (Pa)
-     - t_cad (K)
+     - p_cad                  (Pa)        [pressure at the current crank angle degree]
+     - t_cad                  (K)         [temperature at the current crank angle degree]
+     - v_cad                  (cc)        [volume at the current crank angle degree]
+     - v_cad_1                (cc)        [volume at the next crank angle degree step]
+     - Ah                     (mm^2)      [heat transfer area to the cylinder walls]
     '''
 
-    #Important Engine Metrics
+    #Engine Metrics
     crank_radius = engine_parameters['geometry']['crank_radius']
     connecting_rod = engine_parameters['geometry']['con_rod']
     CAD_ivc = engine_parameters['combustion_characteristics']['CADivc']
@@ -324,71 +338,66 @@ def crank_slider(CAD, SHR, Tatm, engine_parameters = engine_parameters):
     
 
     #Metrics throughout adiabatic compression
-    theta = np.deg2rad(CAD)
-    piston_position = crank_radius + connecting_rod - (np.sqrt((connecting_rod**2)-((crank_radius**2)*(np.sin(theta))**2)) + crank_radius*np.cos(theta))
-    vol = clearance_volume + ((np.pi/4) * (bore**2) * piston_position)/1000
-    p_cad = p_ivc*(v_ivc/vol)**SHR
-    t_cad = t_ivc*(v_ivc/vol)**(SHR-1)
+    piston_position = crank_radius + connecting_rod - (np.sqrt((connecting_rod**2)-((crank_radius**2)*(np.sin(np.deg2rad(CAD)))**2)) + crank_radius*np.cos(np.deg2rad(CAD)))
+    piston_position_1 = crank_radius + connecting_rod - (np.sqrt((connecting_rod**2)-((crank_radius**2)*(np.sin(np.deg2rad(CAD + CAD_step)))**2)) + crank_radius*np.cos(np.deg2rad(CAD + CAD_step)))
+    v_cad = clearance_volume + ((np.pi/4) * (bore**2) * piston_position)/1000
+    v_cad_1 = clearance_volume + ((np.pi/4) * (bore**2) * piston_position_1)/1000
+    p_cad = p_ivc*(v_ivc/v_cad)**SHR
+    t_cad = t_ivc*(v_ivc/v_cad)**(SHR-1)
+
+    #Heat Transfer Area
+    Ah = (np.pi*bore**2)/2 + np.pi*bore*piston_position
 
 
-    return p_cad, t_cad
-
-def volume(CAD, CAD_step, engine_parameters = engine_parameters):
-
-    #Important Engine Metrics
-    crank_radius = engine_parameters['geometry']['crank_radius']
-    con_rod = engine_parameters['geometry']['con_rod']
-    Disp = engine_parameters['geometry']['displacement']
-    CR = engine_parameters['geometry']['compression_ratio']
-    Bore = engine_parameters['geometry']['bore']
-    clearance_volume = Disp/CR
-
-    #Volume Model
-    theta = np.deg2rad(CAD)
-    theta_step = np.deg2rad(CAD_step)
-    x_i = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2)*(np.sin(theta))**2)) + crank_radius*np.cos(theta))
-    x_i_1 = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2)*(np.sin(theta+theta_step))**2)) + crank_radius*np.cos(theta+theta_step))
-    v_i = clearance_volume + (((np.pi * Bore**2)/4)*x_i)/1000
-    v_i_1 = clearance_volume + (((np.pi * Bore**2)/4)*x_i_1)/1000
-
-    #Heat transfer area
-    Ah = (np.pi*Bore**2)/2 + np.pi*Bore*x_i
-
-    return v_i, v_i_1, Ah
+    return p_cad, t_cad, v_cad, v_cad_1, Ah
 
 
-def douaund_eyzat(ON, Pcad, Tcad):
+def douaund_eyzat(ON, p_cad, t_cad):
 
     '''
-    Inputs:
-    - ON: Octane Number (unitless)
-    - Pcad: Pressure at current crank angle degree
-    - Tcad: Temperature at current crank angle degree
+    Overview:
+        this function represents the douaund-eyzat model for ignition
+    delay timing, in milliseconds. Although it is the most widely accepted 
+    model to solve for IDT, it is only used as a reference in this 
+    thermodynamic model because it doesn't take into account fuel 
+    enrichement 
 
-    Output:
-    - IDT: ignition delay time (ms)
+    Inputs:                   (unit)      [description]
+     - ON                     (Octane)    [octane number]
+     - p_cad                  (Pa)        [pressure at the current crank angle degree]
+     - t_cad                  (K)         [temperature at the current crank angle degree]
+
+     Outputs:
+     - IDT                    (ms)        [ignition delay timing]
     '''
-
+    
     #Model Constants
     c1 = 17.69
     c2 = 3.402
     c3 = 1.7
     c4 = 3800
 
-    IDT = c1 * (ON/100)**c2 * Pcad**(-c3) * np.exp(c4/Tcad)
+    IDT = c1 * (ON/100)**c2 * p_cad**(-c3) * np.exp(c4/t_cad)
 
     return IDT
 
-def hoepke(Xegr,Pcad,Tcad):
+def hoepke(x_egr, p_cad, t_cad):
 
     '''
-    Inputs:
-    - Xeger: Portion of exhuast gas recirculated
-    - Pcad: Pressure at current crank angle degree
-    - Tcad: Temperature at current crank angle degree
+    Overview:
+        this function represents the hoepke model for ignition
+    delay timing, in milliseconds. A major model for IDT when taking
+    into account exhasust gas recirculation. Once again, it is only 
+    used as a reference in this thermodynamic model because it doesn't
+    take into account fuel enrichement 
 
-    Outputs:
-    - IDT: ignition delay time (ms)
+    Inputs:                   (unit)       [description]
+     - x_egr                  (percentage) [amount of exhaust gas recirculation]
+     - p_cad                  (Pa)         [pressure at the current crank angle degree]
+     - t_cad                  (K)          [temperature at the current crank angle degree]
+
+     Outputs:
+     - IDT                    (ms)        [ignition delay timing]
     '''
 
     #Model Constants
@@ -397,21 +406,26 @@ def hoepke(Xegr,Pcad,Tcad):
     c3 = 1.499
     c4 = 5865
 
-    IDT = c1 * (Pcad/Tcad)**-c2 * (1 - Xegr)**-c3 * np.e**(c4/Tcad)
+    IDT = c1 * (p_cad/t_cad)**-c2 * (1 - x_egr)**-c3 * np.e**(c4/t_cad)
 
     return IDT
 
-def chen_zheng(lmnbda, Xegr, Pcad, Tcad):
+def chen_zheng(lmnbda, x_egr, p_cad, t_cad):
 
     '''
-    Inputs:
-    - lmnbda: A measure of the air fuel ratio of the current mixture
-    - Xeger: Portion of exhuast gas recirculated
-    - Pcad: Pressure at current crank angle degree
-    - Tcad: Temperature at current crank angle degree
+    Overview:
+        this function represents the chen-zheng model for ignition
+    delay timing, in milliseconds. this is the TDI model used for this
+    thermodynamic model because it seems like the most comprehensive model
 
-    Outputs:
-    - IDT: ignition delay time (ms)
+    Inputs:                   (unit)       [description]
+     - lmnbda                 (unitless)   [fuel enrichment lmnbda value]
+     - x_egr                  (percentage) [amount of exhaust gas recirculation]
+     - p_cad                  (Pa)         [pressure at the current crank angle degree]
+     - t_cad                  (K)          [temperature at the current crank angle degree]
+
+     Outputs:
+     - IDT                    (ms)         [ignition delay timing]
     '''
 
     #Model Constants
@@ -421,22 +435,30 @@ def chen_zheng(lmnbda, Xegr, Pcad, Tcad):
     c4 = 1.927
     c5 = 3167
 
-    IDT = c1 * (Pcad/Tcad)**-c2 * (1 - Xegr)**-c3 * lmnbda**-c4 * np.e**(c5/Tcad)
+    IDT = c1 * (p_cad/t_cad)**-c2 * (1 - x_egr)**-c3 * lmnbda**-c4 * np.e**(c5/t_cad)
 
     return IDT
 
 def wiebe(CAD, CAD_step, CADivc, Spark, combustion_duration, m ):
 
     '''
-    Inputs:
-    - CAD: crank angle degree (deg)
-    - Spark: crank angle degree at spark (deg)
-    - combustion_duration: duration of combustion (deg)
-    - a: amount burned (unitless)
-    - m: shape parameter (unitless)
+    Overview:
+        the wiebe function is used to determine the percentage of
+    mass in the cylinder that is currrently burnt. the shape of the
+    curve is set by the correlation constant (a) and shape factor (m)
+    which will be refined more with emperical data.
 
-    Outputs:
-    - x: fraction of fuel burned
+    Inputs:                   (unit)       [description]
+     - CAD                    (deg)        [current crank angle degree]
+     - CAD_step               (deg)        [current crank angle degree step size]
+     - CAD_ivc                (deg)        [crank angle degree at intake valve opening]
+     - spark                  (deg)        [crank angle degree when the spark plug is fired]
+     - combustion_duration    (deg)        [duration of the combustion event]
+     - m                      (unitless)   [shape factor] 
+     
+     Outputs:
+     - xb_i                   (percentage) [percentage of burnt mass in the cylinder at the current CAD step]
+     - xb_i_1                 (percentage) [percentage of burnt mass in the cylinder at a crank angle step degree in the future]
     '''
     #constants
     a = 6.9078 #0-99.9% burned
