@@ -1,16 +1,28 @@
 '''
-___________________________________________________________
-|                                                         |
-|                Knock Prediction Model                   |
-|_________________________________________________________|
+============================================================
+============================================================
+==                                                        ==
+==               Knock Prediction Model                   ==
+==                                                        ==
+============================================================
+============================================================
 
 '''
 
+'''
+___________________________________________________________
+|                                                         |
+|                        Imports                          |
+|_________________________________________________________|
+
+'''
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import PySide6 as Py
-import tkinter as tk
+from PyQt5.QtWidgets import QApplication, QMainWindow
+from PyQt5.QtGui import QIcon
 
 '''
 ___________________________________________________________
@@ -25,26 +37,26 @@ Combustion_Elements = {
         'density': 0.78945, #g/cm^3
         'molar_mass': 46.0684400, #g/mol
         'nasa_1': {
-            'min_temp': 159.000, #K
-            'max_temp': 390.0007, #K
-            'a1': 4.501115940E+05,
-            'a2': -1.020828990E+04,
-            'a3': 1.014266780E+02,
-            'a4': -3.874672610E-01,
-            'a5': 7.121392610E-04,
-            'a6': -1.857071450E-07,
-            'a7': -2.037622570E-10,
+            'min_temp': 200.000, #K
+            'max_temp': 1000.000, #K
+            'a1': -2.342791392E+05,
+            'a2': 4.479180550E+03,
+            'a3': -2.744817302E+01,
+            'a4': 1.088679162E-01,
+            'a5': -1.305309334E-04,
+            'a6': 8.437346400E-08,
+            'a7': -2.234559017E-11
         },
-                'nasa_1': {
-            'min_temp': 159.000, #K
-            'max_temp': 390.0007, #K
-            'a1': 4.501115940E+05,
-            'a2': -1.020828990E+04,
-            'a3': 1.014266780E+02,
-            'a4': -3.874672610E-01,
-            'a5': 7.121392610E-04,
-            'a6': -1.857071450E-07,
-            'a7': -2.037622570E-10,
+        'nasa_2': {
+            'min_temp': 1000.000, #K
+            'max_temp': 6000.000, #K
+            'a1': 4.694817650E+06,
+            'a2': -1.929798213E+04,
+            'a3': 3.447584040E+01,
+            'a4': -3.236165980E-03,
+            'a5': 5.784947720E-07,
+            'a6': -5.564600270E-11,
+            'a7': 2.226226400E-15
         }
     },
     'C8H18': {
@@ -218,7 +230,7 @@ engine_parameters = {
         'compression_ratio': 12.7, #unitless
         'displacement': 692.7, #cc
     },
-    'combustion_charicteristics': {
+    'combustion_characteristics': {
         'CADivc': 53, #deg ABDC
         'redline_rpm': 9000, #rpm
         'volumetric_efficiency': 0.95, #unitless
@@ -299,7 +311,7 @@ def crank_slider(CAD, SHR, Tatm, engine_parameters = engine_parameters):
     clearance_volume = Disp / CR
     vol_ivc = clearance_volume + ((np.pi/4) * (Bore**2) * piston_position_ivc)/1000
     Tivc = Tatm + 15
-    Pivc = MAP
+    Pivc = MAP * 1000 #Pa
     
 
     #Metrics throughout adiabatic compression
@@ -327,8 +339,8 @@ def volume(CAD, CAD_step, engine_parameters = engine_parameters):
     theta_step = np.deg2rad(CAD_step)
     x_i = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2)*(np.sin(theta))**2)) + crank_radius*np.cos(theta))
     x_i_1 = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2)*(np.sin(theta+theta_step))**2)) + crank_radius*np.cos(theta+theta_step))
-    v_i = clearance_volume + ((np.pi * Bore**2)/4)*x_i
-    v_i_1 = clearance_volume + ((np.pi * Bore**2)/4)*x_i_1
+    v_i = clearance_volume + (((np.pi * Bore**2)/4)*x_i)/1000
+    v_i_1 = clearance_volume + (((np.pi * Bore**2)/4)*x_i_1)/1000
 
     #Heat transfer area
     Ah = (np.pi*Bore**2)/2 + np.pi*Bore*x_i
@@ -404,7 +416,7 @@ def chen_zheng(lmnbda, Xegr, Pcad, Tcad):
 
     return IDT
 
-def wiebe(CAD, CAD_step, Spark, combustion_duration):
+def wiebe(CAD, CAD_step, CADivc, Spark, combustion_duration, m ):
 
     '''
     Inputs:
@@ -419,14 +431,13 @@ def wiebe(CAD, CAD_step, Spark, combustion_duration):
     '''
     #constants
     a = 6.9078 #0-99.9% burned
-    m = 2 #based on general assumption ***needs to be updated***
 
-    xb_i = 1 - np.e**(-a*((CAD-Spark)/(combustion_duration))**(m+1))
-    xb_i_1 = 1 - np.e**(-a*((CAD_step-Spark)/(combustion_duration))**(m+1))
+    xb_i = 1 - np.e**(-a*(((CAD-CADivc)-Spark)/(combustion_duration))**(m+1))
+    xb_i_1 = 1 - np.e**(-a*(((CAD+CAD_step-CADivc)-Spark)/(combustion_duration))**(m+1))
 
     return xb_i, xb_i_1
 
-def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbda, rpm, Tatm, T_wall, engine_parameters = engine_parameters, fuel_properties = fuel_properties):
+def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbda, rpm, Tatm, T_wall, fuel_type, m, engine_parameters = engine_parameters, fuel_properties = fuel_properties):
 
     '''
     Inputs:
@@ -461,10 +472,10 @@ def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbd
 
 
     #Wiebe Function Components 
-    xb_i, xb_i_1 = wiebe(CAD, CAD_step, Spark, combustion_duration)
+    xb_i, xb_i_1 = wiebe(CAD, CAD_step, Spark, combustion_duration, m)
 
     #Specific Heat Ratio
-    Cp_u, mol_total, m_fuel = Cp_unburned(T_i, lmnbda)
+    Cp_u, mol_total, m_fuel = Cp_unburned(T_i, lmnbda, fuel_type)
     Cp = Cp_burned(T_i, lmnbda)*xb_i + Cp_u*(1-xb_i)
     k = Cp/(Cp - R_u)
 
@@ -472,10 +483,10 @@ def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbd
     v_i, v_i_1, Ah = volume(CAD, CAD_step)
 
     #Heat Gained from combustion
-    V_air = Disp * engine_parameters['combustion_charicteristics']['volumetric_efficiency'] #cc
+    V_air = Disp * engine_parameters['combustion_characteristics']['volumetric_efficiency'] #cc
     m_air = V_air * .001225 #g
-    m_fuel = (m_air / (lmnbda*fuel_properties['stoich_afr']))/1000 #kg
-    Qin = m_fuel*fuel_properties['lhv']*1000000 #J
+    m_fuel = (m_air / (lmnbda*fuel_properties[fuel_type]['stoich_afr']))/1000 #kg
+    Qin = m_fuel*fuel_properties[fuel_type]['lhv']*1000000 #J
 
     #Heat Transfer to the walls
     mean_piston_speed = 2*(stroke/1000)*rpm / 60
@@ -484,7 +495,7 @@ def pressure_increase(CAD, CAD_step, P_i, T_i, Spark, combustion_duration, lmnbd
     hcg = 3.26*(engine_parameters['geometry']['bore']/1000)**-0.2 * P_i**0.8 * T_i**-0.55 * w**0.8
     Qloss = (hcg * Ah / (2*np.pi*rpm/60))*(T_i - T_wall)
 
-    P_i_1 = P_i + ((k-1)/v_i)*(Qin*(xb_i_1 - xb_i) - Qloss*CAD_step) - (k*P_i/v_i)*(v_i_1-v_i)
+    P_i_1 = P_i + ((k-1)/v_i)*(Qin*(xb_i_1 - xb_i) - Qloss*np.deg2rad(CAD_step)) - (k*P_i/v_i)*(v_i_1-v_i)
     T_i_1 = (P_i_1 * v_i_1)/(mol_total * R_u)
 
     return P_i_1, T_i_1
@@ -531,7 +542,7 @@ def nasa_polynomial(Tcad, element, Combustion_Elements = Combustion_Elements):
 
     return Cp
   
-def Cp_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters):
+def Cp_unburned(Tcad, lmnbda, fuel_type, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters):
 
     '''
     Inputs:
@@ -546,9 +557,9 @@ def Cp_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_
 
 
     #Atmospheric Air Composition
-    V_air = engine_parameters['geometry']['displacement'] * engine_parameters['combustion_charicteristics']['volumetric_efficiency'] #cc
+    V_air = engine_parameters['geometry']['displacement'] * engine_parameters['combustion_characteristics']['volumetric_efficiency'] #cc
     m_air = V_air * .001225 #g
-    m_fuel = m_air / (lmnbda*fuel_properties['stoich_afr']) #g
+    m_fuel = m_air / (lmnbda*fuel_properties[fuel_type]['stoich_afr']) #g
     V_fuel = m_fuel / (0.85*Combustion_Elements['C2H5OH']['density'] + 0.15*Combustion_Elements['C8H18']['density'])
     V_C2H5OH = V_fuel * 0.85 #cc
     V_C8H18 = V_fuel * 0.15 #cc
@@ -604,20 +615,25 @@ def Cp_unburned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_
 
 def Cp_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_parameters = engine_parameters):
 
-    V_air = engine_parameters['geometry']['displacement'] * engine_parameters['combustion_charicteristics']['volumetric_efficiency'] #cc
-    V_fuel = V_air / (lmnbda*fuel_properties['stoich_afr']) #cc
+    #Atmospheric Air Composition
+    V_air = engine_parameters['geometry']['displacement'] * engine_parameters['combustion_characteristics']['volumetric_efficiency'] #cc
+    m_air = V_air * .001225 #g
+    m_fuel = m_air / (lmnbda*fuel_properties[fuel_type]['stoich_afr']) #g
+    V_fuel = m_fuel / (0.85*Combustion_Elements['C2H5OH']['density'] + 0.15*Combustion_Elements['C8H18']['density'])
     V_C2H5OH = V_fuel * 0.85 #cc
     V_C8H18 = V_fuel * 0.15 #cc
 
     #Precombustion mols
 
-    #Ethanol
+    #ethanol
     m_C2H5OH = V_C2H5OH * Combustion_Elements['C2H5OH']['density'] #g
     mol_C2H5OH = m_C2H5OH / Combustion_Elements['C2H5OH']['molar_mass'] #mol
+    Cp_C2H5OH = nasa_polynomial(Tcad, 'C2H5OH', Combustion_Elements) #J/(mol*K)
 
     #Octane
     m_C8H18 = V_C8H18 * Combustion_Elements['C8H18']['density'] #g
-    mol_C8H18 = m_C8H18 / Combustion_Elements['C8H18']['molar_mass'] #mol
+    mol_C8H18 = m_C8H18 / Combustion_Elements['C8H18']['molar_mass']
+    Cp_C8H18 = nasa_polynomial(Tcad, 'C8H18', Combustion_Elements) #J/(mol*K)
 
     #Nitrogen
     m_N2 = V_air * .7808 * Combustion_Elements['N2']['density'] #g
@@ -640,15 +656,15 @@ def Cp_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_pa
 
     #Reaction Amounts
     num_rxn = mol_O2/28
-    mol_C2H5OH = mol_C2H5OH - num_rxn * 1 
-    mol_C8H18 = mol_C8H18 - num_rxn * 2
+    mol_C2H5OH_b = mol_C2H5OH - num_rxn * 1 
+    mol_C8H18_b = mol_C8H18 - num_rxn * 2
     mol_H2O = num_rxn * 21
     mol_CO2 = mol_CO2 + num_rxn * 18
 
     #Water
     Cp_H2O = nasa_polynomial(Tcad, 'H2O', Combustion_Elements)
 
-    mol_total = mol_H2O + mol_CO2 + mol_N2 + mol_Ar 
+    mol_total = mol_H2O + mol_CO2 + mol_N2 + mol_Ar + (mol_C2H5OH - mol_C2H5OH_b) + (mol_C8H18 - mol_C8H18_b) 
 
     #Post Combustion
     m_C2H5OH = mol_C2H5OH * Combustion_Elements['C2H5OH']['molar_mass']
@@ -663,12 +679,14 @@ def Cp_burned(Tcad, lmnbda, Combustion_Elements = Combustion_Elements, engine_pa
         (Cp_N2*mol_N2) +  
         (Cp_Ar*mol_Ar) + 
         (Cp_CO2*mol_CO2) + 
-        (Cp_H2O*mol_H2O)
+        (Cp_H2O*mol_H2O) +
+        (Cp_C2H5OH*mol_C2H5OH) +
+        (Cp_C8H18*mol_C8H18)
         )/ mol_total
 
     return Cp_burned
 
-def livengood_wu(rpm, IDT):
+def livengood_wu(rpm, IDT, CAD_step):
 
    '''
     Inputs:
@@ -682,9 +700,34 @@ def livengood_wu(rpm, IDT):
     - 
     '''
 
-   LWI = (1 / (6 * rpm)) * (1/IDT)
+   LWI = (1 / (6 * rpm)) * (1/IDT) * CAD_step
    
    return  LWI 
+
+'''
+___________________________________________________________
+|                                                         |
+|                     Dialouge Box                        |
+|_________________________________________________________|
+
+'''
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Knock Prediction Model")
+        self.setGeometry(700, 300, 750, 500)
+
+def main():
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    main()
+
+
+
 
 '''
 ___________________________________________________________
@@ -696,19 +739,20 @@ ___________________________________________________________
 #User imports for specific model
 location = input('Testing Location:   ')
 fuel_type = input('Fuel Type:   ')
-lmnbda = input('Lambda:   ')
+lmnbda = float(input('Lambda:   '))
 
 
 #Important Variables
-pk_T_rpm = engine_parameters['combustion_charicteristics']['peak_torque_rpm'] #rpm
-R = R = 8.314462618 #J/(mol*K)
+pk_T_rpm = engine_parameters['combustion_characteristics']['peak_torque_rpm'] #rpm
+R = 8.314462618 #J/(mol*K)
 ON = fuel_properties[fuel_type]['ON']
 Patm = weather_data[location]['Patm']
 Tatm = weather_data[location]['Tatm']
+CAD_step = 1 #deg
 
 
 #Monte Carlo Simulations
-monte_carlo_sims = 1000
+monte_carlo_sims = 200
 combustion_duration = np.random.uniform(35,50, monte_carlo_sims)
 m = np.random.uniform(1.5,2.5, monte_carlo_sims)
 T_wall = np.random.uniform(453.15,523.15, monte_carlo_sims)
@@ -725,11 +769,12 @@ livengood_wu_integral = {
 CADs = {}
 
 for spark in range(0,20):
+    
 
     #Add a dictionary for each tested spark timing
     #pressure and temperature
-    pressure.update({spark:[engine_parameters['combustion_charicteristics']['MAP']]})
-    temperature.update({spark:[weather_data['rellis']['Tatm'] + 15]})
+    pressure.update({spark:[engine_parameters['combustion_characteristics']['MAP']]})
+    temperature.update({spark:[weather_data[location]['Tatm'] + 15]})
 
     #ignition delay timing
     livengood_wu_integral['douaund_eyzat'].update({spark:[0]})
@@ -737,28 +782,32 @@ for spark in range(0,20):
     livengood_wu_integral['chen_zheng'].update({spark:[0]})
     CADs.update({spark:[]})
 
-     
-    for CAD in np.arange((engine_parameters['combustion_charicteristics']['CADivc']+ 180), (360 - spark + combustion_duration),1):
+    
+    for CAD in np.arange((engine_parameters['combustion_characteristics']['CADivc']+ 180), (360 - spark + combustion_duration.normal()),1):
 
-        while CAD < 360-spark: 
-            Cp_unburned, mol_total, m_fuel = Cp_unburned(temperature[spark][-1],.95)
-            shr = Cp_unburned / (Cp_unburned - R)
-            Pcad, Tcad = crank_slider(CAD, shr, weather_data['rellis']['Tatm'])
+        #Append to CADs
+        CADs[spark].append(CAD)
+
+
+        if CAD < 360-spark: 
+            Cp_u, mol_total, m_fuel = Cp_unburned(temperature[spark][-1],lmnbda, fuel_type)
+            shr = Cp_u / (Cp_u - R)
+            Pcad, Tcad = crank_slider(CAD, shr, weather_data[location]['Tatm'])
 
         else:
-            Pcad, Tcad = pressure_increase(CAD, 1, pressure[spark][-1], temperature[spark][-1], spark, combustion_duration, lmnbda, rpm, Tatm, T_wall)
+            Pcad, Tcad = pressure_increase(CAD, 1, pressure[spark][-1], temperature[spark][-1], spark, combustion_duration, lmnbda, rpm.normal(), Tatm, T_wall.normal(), fuel_type, m.normal())
         
-            #Pressure and Temperature
-            pressure[spark].append(Pcad)
-            temperature[spark].append(Tcad)
+        #Pressure and Temperature
+        pressure[spark].append(Pcad)
+        temperature[spark].append(Tcad)
 
-            #Ignition Delay Timing
-            livengood_wu_integral['douaund_eyzat'][spark].append(livengood_wu(rpm, douaund_eyzat(ON, Pcad, Tcad)))
-            livengood_wu_integral['hoepke'][spark].append(livengood_wu(rpm, hoepke(0, Pcad, Tcad)))
-            livengood_wu_integral['chen_zheng'][spark].append(livengood_wu(rpm, chen_zheng(lmnbda,0,Pcad,Tcad)))
+        #Ignition Delay Timing
+        livengood_wu_integral['douaund_eyzat'][spark].append(livengood_wu(rpm, douaund_eyzat(ON, Pcad, Tcad)))
+        livengood_wu_integral['hoepke'][spark].append(livengood_wu(rpm, hoepke(0, Pcad, Tcad)))
+        livengood_wu_integral['chen_zheng'][spark].append(livengood_wu(rpm, chen_zheng(lmnbda,0,Pcad,Tcad)))
 
 
-plt.figure(CADs[12], livengood_wu_integral['chen_zheng'])
+plt.plot(CADs[12], livengood_wu_integral['chen_zheng'])
 plt.show()
     
 
