@@ -21,8 +21,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import PySide6 as Py
-from PyQt5.QtWidgets import QApplication, QMainWindow
-from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout
+from PyQt5.QtGui import QIcon, QFont
+from PyQt5.QtCore import Qt
 
 '''
 ___________________________________________________________
@@ -223,18 +224,18 @@ engine_parameters = {
         'year': "2019"
     },
     'geometry': {
-        'bore': 80, #mm
-        'stroke': 105, #mm
+        'bore': 84.5, #mm
+        'stroke': 102, #mm
         'crank_radius': 40, #mm
         'con_rod': 160, #mm ***subject to change based on actual con rod length***
-        'compression_ratio': 12.7, #unitless
-        'displacement': 692.7, #cc
+        'compression_ratio': 12.6, #unitless
+        'displacement': 690, #cc
     },
     'combustion_characteristics': {
         'CADivc': 53, #deg ABDC
         'redline_rpm': 9000, #rpm
         'volumetric_efficiency': 0.95, #unitless
-        'MAP' : 86.3, #kPa
+        'MAP' : 86300, #Pa
         'peak_torque_rpm': 6500 #rpm
     }
 }
@@ -255,16 +256,16 @@ fuel_properties = {
 
 weather_data = {
     'standard_sea_level':{
-        'Patm': 101.325, #kPa
-        'Tatm': 298.15 #K
+        'p_atm': 101325, #Pa
+        't_atm': 298.15 #K
     },
     'michigan_international_speedway':{
-        'Patm': 97.522, #kPa
-        'Tatm': 294.3 #K
+        'p_atm': 97522, #Pa
+        't_atm': 294.3 #K
     },
     'rellis':{
-        'Patm': 100.375, #kPa
-        'Tatm': 305.4 #K
+        'p_atm': 100375, #Pa
+        't_atm': 305.4 #K
     }
 }
 
@@ -279,50 +280,58 @@ ___________________________________________________________
 def crank_slider(CAD, SHR, Tatm, engine_parameters = engine_parameters):
 
     '''
+    Overview:
+        this function is a crank-slider model that determines the cylinder
+    temperature and pressure from engine geometry and the temperature and 
+    pressure at intake valve closing. Solves for the adiabatic portion of 
+    the compression stroke is used for the motored pressure necessary for 
+    the Woschni heat transfer model
+
     Inputs:
-     - crank_radius: crank radius (mm)
-     - con_rod: connecting rod length (mm)
-     - CAD: crank angle degree (deg)
-     - SHR: specific heat ratio (unitless)
-     - Tatm: atmospheric temperature (K)
-     - Patm: atmospheric pressure (kPa)
-     - CADivc: crank angle degree at intake valve closing (deg)
-     - Disp: displacement (cc)
-     - CR: compression ratio (unitless)
+     - Engine Geometries
+         - crank_radius (mm)
+         - connecting_rod (mm)
+         - bore (mm)
+         - displacement (cc)
+         - compression_ratio (unitless)
+         - CAD_ivc (deg)
+         - MAP (Pa)
+     - CAD (deg)
+     - SHR (unitless)
+     - t_atm (K)
 
      Outputs:
-     - Pcad: pressure at current crank angle degree
-     - Tcad: temperatire at current crank angle degree
+     - p_cad (Pa)
+     - t_cad (K)
     '''
 
     #Important Engine Metrics
     crank_radius = engine_parameters['geometry']['crank_radius']
-    con_rod = engine_parameters['geometry']['con_rod']
+    connecting_rod = engine_parameters['geometry']['con_rod']
     CAD_ivc = engine_parameters['combustion_characteristics']['CADivc']
-    Disp = engine_parameters['geometry']['displacement']
-    CR = engine_parameters['geometry']['compression_ratio']
-    Bore = engine_parameters['geometry']['bore']
+    displacement = engine_parameters['geometry']['displacement']
+    compression_ratio = engine_parameters['geometry']['compression_ratio']
+    bore = engine_parameters['geometry']['bore']
     MAP = engine_parameters['combustion_characteristics']['MAP']
 
 
-
     #Baseline Metrics at Intake Valve Closing
-    piston_position_ivc = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2) * (np.sin(np.deg2rad(CAD_ivc)))**2)) + crank_radius*np.cos(np.deg2rad(CAD_ivc)))
-    clearance_volume = Disp / CR
-    vol_ivc = clearance_volume + ((np.pi/4) * (Bore**2) * piston_position_ivc)/1000
-    Tivc = Tatm + 15
-    Pivc = MAP * 1000 #Pa
+    piston_position_ivc = crank_radius + connecting_rod - (np.sqrt((connecting_rod**2)-((crank_radius**2) * (np.sin(np.deg2rad(CAD_ivc)))**2)) + crank_radius*np.cos(np.deg2rad(CAD_ivc)))
+    clearance_volume = displacement / compression_ratio
+    v_ivc = clearance_volume + ((np.pi/4) * (bore**2) * piston_position_ivc)/1000
+    t_ivc = Tatm + 15
+    p_ivc = MAP #Pa
     
 
     #Metrics throughout adiabatic compression
     theta = np.deg2rad(CAD)
-    piston_position = crank_radius + con_rod - (np.sqrt((con_rod**2)-((crank_radius**2)*(np.sin(theta))**2)) + crank_radius*np.cos(theta))
-    vol = clearance_volume + ((np.pi/4) * (Bore**2) * piston_position)/1000
-    Pcad = Pivc*(vol_ivc/vol)**SHR
-    Tcad = Tivc*(vol_ivc/vol)**(SHR-1)
+    piston_position = crank_radius + connecting_rod - (np.sqrt((connecting_rod**2)-((crank_radius**2)*(np.sin(theta))**2)) + crank_radius*np.cos(theta))
+    vol = clearance_volume + ((np.pi/4) * (bore**2) * piston_position)/1000
+    p_cad = p_ivc*(v_ivc/vol)**SHR
+    t_cad = t_ivc*(v_ivc/vol)**(SHR-1)
 
 
-    return Pcad, Tcad
+    return p_cad, t_cad
 
 def volume(CAD, CAD_step, engine_parameters = engine_parameters):
 
